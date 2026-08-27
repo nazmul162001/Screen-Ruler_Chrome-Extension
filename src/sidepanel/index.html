@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Screen Ruler</title>
+  <link rel="stylesheet" href="sidepanel.css" />
+</head>
+<body>
+  <header class="tabs">
+    <button class="tab is-on" data-tab="element" type="button">Element</button>
+    <button class="tab" data-tab="page" type="button">Page</button>
+  </header>
+
+  <section id="view-element" class="view is-on">
+    <div id="empty-element" class="empty">
+      <p>Hover an element, then click to inspect.</p>
+      <p class="hint">Alt + ↑ parent · Alt + ↓ child · Esc to clear</p>
+    </div>
+    <div id="element-root" hidden></div>
+  </section>
+
+  <section id="view-page" class="view">
+    <div id="page-root"></div>
+  </section>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>

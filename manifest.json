@@ -1,0 +1,57 @@
+{
+  "manifest_version": 3,
+  "name": "Screen Ruler",
+  "version": "1.0.0",
+  "description": "Measure, inspect, and edit anything on the web. Pixel distances, box model, computed CSS, live editing, and page insights.",
+  "minimum_chrome_version": "116",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "Screen Ruler (Alt+Shift+S)",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "src/background/service-worker.js"
+  },
+  "side_panel": {
+    "default_path": "src/sidepanel/index.html"
+  },
+  "options_page": "src/popup/popup.html",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "sidePanel",
+    "contextMenus",
+    "storage",
+    "tabs",
+    "downloads"
+  ],
+  "host_permissions": ["<all_urls>"],
+  "commands": {
+    "toggle-ruler": {
+      "suggested_key": {
+        "default": "Alt+Shift+S",
+        "mac": "Alt+Shift+S"
+      },
+      "description": "Toggle Screen Ruler on the current page"
+    }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "src/content/overlay/overlay.css",
+        "icons/*.png"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
