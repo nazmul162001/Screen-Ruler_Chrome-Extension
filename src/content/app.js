@@ -50,10 +50,8 @@ SR.app = {
     this.state.selected = null;
     this.state.paused = false;
     this.bind(false);
-    SR.rulers.disable();
     SR.grid.disable();
     SR.xray.disable();
-    SR.find.hide();
     SR.floating.disable();
     SR.responsive.disable();
     SR.stage.disable();
@@ -149,13 +147,15 @@ SR.app = {
 
   onKey(e) {
     if (!this.state.active) return;
-    const path = e.composedPath ? e.composedPath() : [e.target];
-    const typing = path.some((n) => n && (n.tagName === "INPUT" || n.tagName === "TEXTAREA" || n.tagName === "SELECT" || n.isContentEditable));
-    if (typing && e.key !== "Escape") return;
+    if (this.isTyping(e) && e.key !== "Escape") return;
 
     if (e.key === "Escape") {
       e.preventDefault();
       if (SR.find.open) { SR.find.hide(); SR.toolbar.setActive("find", false); return; }
+      if (SR.grid.enabled && SR.grid.panel && SR.grid.panel.style.display !== "none") {
+        SR.grid.hidePanel();
+        return;
+      }
       if (this.state.selected) { this.clearSelection(); return; }
       this.stop();
       return;
@@ -177,14 +177,27 @@ SR.app = {
     }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const map = {
-      Digit1: "inspect", Digit3: "grid", Digit4: "rulers",
-      Digit6: "eyedropper", Digit7: "find",
+      Digit1: "inspect", Digit3: "grid",
+      Digit6: "eyedropper",
       Digit8: "screenshot", Digit9: "responsive", Digit0: "panel",
     };
     if (map[e.code]) {
       e.preventDefault();
       this.onTool(map[e.code]);
     }
+  },
+
+  isTyping(e) {
+    const isField = (n) => n && (n.tagName === "INPUT" || n.tagName === "TEXTAREA" || n.tagName === "SELECT" || n.isContentEditable);
+    const path = e && e.composedPath ? e.composedPath() : (e && e.target ? [e.target] : []);
+    if (path.some(isField)) return true;
+    const shadow = SR.overlay && SR.overlay.shadow;
+    if (shadow && isField(shadow.activeElement)) return true;
+    const iframe = SR.dock && SR.dock.wrap && SR.dock.wrap.querySelector("iframe");
+    try {
+      if (iframe && iframe.contentDocument && isField(iframe.contentDocument.activeElement)) return true;
+    } catch (_) { /* ignore */ }
+    return false;
   },
 
   isUiEvent(e) {
@@ -290,23 +303,19 @@ SR.app = {
         SR.toolbar.setActive("xray", this.state.tools.xray);
         break;
       case "grid":
+        if (SR.grid.enabled && SR.grid.panel && SR.grid.panel.style.display === "none") {
+          SR.grid.showPanel();
+          this.state.tools.grid = true;
+          SR.toolbar.setActive("grid", true);
+          break;
+        }
         this.state.tools.grid = !this.state.tools.grid;
-        this.state.tools.grid ? SR.grid.enable(SR.overlay.shadow) : SR.grid.disable();
+        if (this.state.tools.grid) SR.grid.enable(SR.overlay.shadow);
+        else SR.grid.disable();
         SR.toolbar.setActive("grid", this.state.tools.grid);
-        break;
-      case "rulers":
-        this.state.tools.rulers = !this.state.tools.rulers;
-        this.state.tools.rulers ? SR.rulers.enable(SR.overlay.shadow) : SR.rulers.disable();
-        SR.toolbar.setActive("rulers", this.state.tools.rulers);
         break;
       case "eyedropper":
         SR.eyedropper.pick();
-        break;
-      case "find":
-        this.state.tools.find = !SR.find.open;
-        if (this.state.tools.find) SR.find.show(SR.overlay.shadow);
-        else SR.find.hide();
-        SR.toolbar.setActive("find", SR.find.open);
         break;
       case "screenshot":
         SR.screenshot.capture(this.state.selected || this.state.hover);

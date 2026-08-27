@@ -39,10 +39,8 @@ When it turns on you get the bottom bar only. **Selector mode is already active*
 | --- | --- | --- |
 | Parent / child | `Alt+↑` / `Alt+↓` | Move up or down the DOM |
 | Selector | `1` | Floating CSS inspector (box model, layout, appearance, text). `Space` pins the card |
-| Layout grid | `3` | Overlay a layout grid |
-| Page rulers | `4` | Rulers and drag-out guides |
+| Layout grid | `3` | Column overlay. Click to open settings: columns, max width, gutter, margin, color, opacity |
 | Color picker | `6` | Eyedropper; copies the hex |
-| Find selector | `7` | Search by CSS selector |
 | Screenshot | `8` | Capture the selected or hovered element |
 | Responsive | `9` | Multi-viewport from the page’s CSS breakpoints, with synced scroll |
 | Side panel | `0` | In-page Element + Page inspector |

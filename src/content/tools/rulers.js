@@ -121,40 +121,183 @@ SR.rulers = {
 
 SR.grid = {
   enabled: false,
-  columns: 12,
-  gutter: 24,
-  maxWidth: 1200,
+  visible: true,
+  columns: 8,
+  gutter: 20,
+  margin: 40,
+  maxWidth: "auto",
+  color: "#FC48FF",
+  opacity: 35,
   node: null,
+  panel: null,
 
-  enable(shadow, opts) {
-    this.disable();
-    if (opts) Object.assign(this, opts);
+  enable(shadow) {
+    if (this.enabled) return;
+    this.shadow = shadow;
     this.enabled = true;
+    this.visible = true;
     this.node = document.createElement("div");
     this.node.className = "sr-grid";
-    this.paint();
     shadow.appendChild(this.node);
+    this.mountPanel(shadow);
+    this.paint();
     window.addEventListener("resize", this._onResize = () => this.paint());
+  },
+
+  mountPanel(shadow) {
+    const panel = document.createElement("div");
+    panel.className = "sr-grid-panel";
+    const cols = [2, 4, 6, 8, 12, 16, 24].map((n) =>
+      `<option value="${n}"${n === this.columns ? " selected" : ""}>${n}</option>`
+    ).join("");
+    const maxVal = this.maxWidth === "auto" || this.maxWidth == null ? "auto" : String(this.maxWidth);
+    panel.innerHTML = `
+      <div class="sr-grid-panel-head">
+        <strong>Layout Grid</strong>
+        <button type="button" data-eye title="Show / hide grid" aria-label="Toggle grid visibility">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+        <button type="button" data-close title="Close panel" aria-label="Close">×</button>
+      </div>
+      <label class="sr-grid-row"><span>Columns</span>
+        <select data-field="columns">${cols}</select>
+      </label>
+      <label class="sr-grid-row"><span>Max Width</span>
+        <span class="sr-grid-unit"><input data-field="maxWidth" value="${maxVal}" spellcheck="false" /><i>px</i></span>
+      </label>
+      <label class="sr-grid-row"><span>Gutter</span>
+        <span class="sr-grid-unit"><input data-field="gutter" type="number" min="0" max="80" value="${this.gutter}" /><i>px</i></span>
+      </label>
+      <label class="sr-grid-row"><span>Margin</span>
+        <span class="sr-grid-unit"><input data-field="margin" type="number" min="0" max="200" value="${this.margin}" /><i>px</i></span>
+      </label>
+      <label class="sr-grid-row"><span>Color</span>
+        <span class="sr-grid-color">
+          <input data-field="colorPick" type="color" value="${this.normalizeHex(this.color)}" />
+          <input data-field="color" value="${this.normalizeHex(this.color).replace("#", "")}" spellcheck="false" />
+        </span>
+      </label>
+      <label class="sr-grid-row sr-grid-opacity"><span>Opacity</span>
+        <input data-field="opacity" type="range" min="4" max="80" value="${this.opacity}" />
+      </label>`;
+    panel.addEventListener("mousedown", (e) => e.stopPropagation());
+    panel.addEventListener("click", (e) => e.stopPropagation());
+    panel.addEventListener("keydown", (e) => e.stopPropagation());
+    panel.addEventListener("keyup", (e) => e.stopPropagation());
+    panel.addEventListener("keypress", (e) => e.stopPropagation());
+    panel.querySelector("[data-eye]").addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.setVisible(!this.visible);
+    });
+    panel.querySelector("[data-close]").addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.hidePanel();
+    });
+    panel.querySelector("[data-field=columns]").addEventListener("change", (e) => {
+      this.columns = Math.max(2, parseInt(e.target.value, 10) || 8);
+      this.paint();
+    });
+    panel.querySelector("[data-field=maxWidth]").addEventListener("input", (e) => {
+      const raw = String(e.target.value).trim().toLowerCase();
+      if (!raw || raw === "auto") this.maxWidth = "auto";
+      else {
+        const n = parseInt(raw, 10);
+        this.maxWidth = Number.isFinite(n) && n > 0 ? n : "auto";
+      }
+      this.paint();
+    });
+    panel.querySelector("[data-field=gutter]").addEventListener("input", (e) => {
+      this.gutter = Math.max(0, parseInt(e.target.value, 10) || 0);
+      this.paint();
+    });
+    panel.querySelector("[data-field=margin]").addEventListener("input", (e) => {
+      this.margin = Math.max(0, parseInt(e.target.value, 10) || 0);
+      this.paint();
+    });
+    const colorText = panel.querySelector("[data-field=color]");
+    const colorPick = panel.querySelector("[data-field=colorPick]");
+    colorPick.addEventListener("input", (e) => {
+      this.color = this.normalizeHex(e.target.value);
+      colorText.value = this.color.replace("#", "");
+      this.paint();
+    });
+    colorText.addEventListener("input", (e) => {
+      this.color = this.normalizeHex(e.target.value);
+      colorPick.value = this.normalizeHex(this.color);
+      this.paint();
+    });
+    panel.querySelector("[data-field=opacity]").addEventListener("input", (e) => {
+      this.opacity = Math.max(4, Math.min(80, parseInt(e.target.value, 10) || 35));
+      this.paint();
+    });
+    shadow.appendChild(panel);
+    this.panel = panel;
+    this.syncEye();
+  },
+
+  normalizeHex(value) {
+    let v = String(value || "").trim();
+    if (v.charAt(0) !== "#") v = `#${v}`;
+    const parsed = SR.color.parseRgb(v);
+    return parsed ? SR.color.toHex({ ...parsed, a: 1 }) : "#FC48FF";
+  },
+
+  setVisible(on) {
+    this.visible = !!on;
+    if (this.node) this.node.style.display = this.visible ? "" : "none";
+    this.syncEye();
+  },
+
+  syncEye() {
+    const btn = this.panel && this.panel.querySelector("[data-eye]");
+    if (!btn) return;
+    btn.classList.toggle("is-off", !this.visible);
+    btn.innerHTML = this.visible
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l18 18"/><path d="M10.6 10.6A3 3 0 0 0 12 15a3 3 0 0 0 2.4-4.4"/><path d="M9.9 5.1A11 11 0 0 1 12 5c6 0 10 7 10 7a18 18 0 0 1-4.2 4.8"/><path d="M6.1 6.1A18 18 0 0 0 2 12s4 7 10 7a11 11 0 0 0 3.2-.5"/></svg>';
+  },
+
+  hidePanel() {
+    if (this.panel) this.panel.style.display = "none";
+  },
+
+  showPanel() {
+    if (this.panel) this.panel.style.display = "";
   },
 
   paint() {
     if (!this.node) return;
     const vw = window.innerWidth;
-    const width = Math.min(this.maxWidth, vw - 32);
-    const col = (width - this.gutter * (this.columns - 1)) / this.columns;
-    const offset = (vw - width) / 2;
+    const margin = Number(this.margin) || 0;
+    const gutter = Number(this.gutter) || 0;
+    const columns = Math.max(2, Number(this.columns) || 8);
+    let inner = Math.max(0, vw - margin * 2);
+    if (this.maxWidth !== "auto" && Number(this.maxWidth) > 0) {
+      inner = Math.min(inner, Number(this.maxWidth));
+    }
+    const offset = (vw - inner) / 2;
+    const col = columns > 0 ? (inner - gutter * (columns - 1)) / columns : inner;
+    const rgb = SR.color.parseRgb(this.normalizeHex(this.color)) || { r: 252, g: 72, b: 255 };
+    const a = Math.max(0.04, Math.min(0.8, (Number(this.opacity) || 35) / 100));
+    const fill = `rgba(${Math.round(rgb.r)}, ${Math.round(rgb.g)}, ${Math.round(rgb.b)}, ${a})`;
     const stops = [];
-    for (let i = 0; i < this.columns; i++) {
-      const x = offset + i * (col + this.gutter);
-      stops.push(`transparent ${x}px, rgba(59,130,246,0.10) ${x}px, rgba(59,130,246,0.10) ${x + col}px, transparent ${x + col}px`);
+    for (let i = 0; i < columns; i++) {
+      const x = offset + i * (col + gutter);
+      const x2 = x + Math.max(0, col);
+      stops.push(`transparent ${x}px, ${fill} ${x}px, ${fill} ${x2}px, transparent ${x2}px`);
     }
     this.node.style.background = `linear-gradient(90deg, ${stops.join(",")})`;
   },
 
   disable() {
     this.enabled = false;
+    this.visible = true;
     if (this.node) this.node.remove();
+    if (this.panel) this.panel.remove();
     this.node = null;
+    this.panel = null;
     window.removeEventListener("resize", this._onResize);
   },
 };
