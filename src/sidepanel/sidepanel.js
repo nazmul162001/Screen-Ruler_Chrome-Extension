@@ -96,8 +96,34 @@ function toast(text) {
 }
 
 async function copy(text) {
-  try { await navigator.clipboard.writeText(text); toast("Copied"); }
-  catch (_) { toast("Copy failed"); }
+  const value = String(text ?? "");
+  if (!value) {
+    toast("Nothing to copy");
+    return;
+  }
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(value);
+      toast("Copied");
+      return;
+    }
+  } catch (_) { /* iframe clipboard is often blocked; fall back */ }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = value;
+    ta.setAttribute("readonly", "");
+    ta.style.cssText = "position:fixed;inset:0;width:1px;height:1px;opacity:0;border:0;padding:0";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    ta.setSelectionRange(0, value.length);
+    const ok = document.execCommand("copy");
+    ta.remove();
+    if (ok) toast("Copied");
+    else toast("Copy failed");
+  } catch (_) {
+    toast("Copy failed");
+  }
 }
 
 function iconCopy() {
@@ -124,11 +150,8 @@ function renderElement() {
     const on = i === arr.length - 1;
     return `<button class="crumb${on ? " is-on" : ""}" data-crumb="${esc(a.selector)}">${esc(a.selector)}</button>${i < arr.length - 1 ? '<span class="crumb-sep">›</span>' : ""}`;
   }).join("");
-
-  const contrast = el.a11y && el.a11y.contrast;
-  const contrastBadge = contrast
-    ? `<span class="badge ${contrast.aa ? "ok" : "bad"}">${contrast.ratio}:1 ${contrast.aa ? "AA" : "Fail"}</span>`
-    : "";
+  const colors = uniqueColors(el);
+  const typeCount = el.typography ? 1 : 0;
 
   root.innerHTML = `
     <div class="head">
@@ -136,51 +159,137 @@ function renderElement() {
         <div class="selector">${esc(el.selector)}</div>
         <div class="size">${esc(el.dimensions)}</div>
       </div>
-      <div class="head-actions">
-        <select id="force-state" title="Force element state">
-          <option value="">state</option>
-          <option value="hover">:hover</option>
-          <option value="focus">:focus</option>
-          <option value="active">:active</option>
-          <option value="visited">:visited</option>
-        </select>
-        <button class="icon-btn" id="btn-parent" title="Select parent">${iconPointer()}</button>
-        <button class="icon-btn" id="btn-copy-sel" title="Copy selector">${iconCopy()}</button>
-      </div>
+      <button class="icon-btn" id="btn-copy-sel" title="Copy selector">${iconCopy()}</button>
     </div>
 
-    <div class="section">
-      <div class="section-title">Document</div>
+    <details class="acc" open>
+      <summary>Document</summary>
       <div class="crumbs">${crumbs}</div>
-    </div>
+    </details>
 
-    <div class="section">
-      <div class="section-title">Box model</div>
+    <details class="acc" open>
+      <summary>Box model</summary>
       ${renderBox(box)}
-    </div>
+    </details>
 
-    ${el.isCanvas && el.canvas ? `<div class="section"><div class="section-title">Canvas</div>
-      <table class="kv"><tr><td class="k">bitmap</td><td class="v">${el.canvas.width} × ${el.canvas.height}</td></tr></table></div>` : ""}
-    ${renderLayout(el.layout)}
-    ${renderColors(el.colors)}
-    ${renderType(el.typography)}
-    ${renderA11y(el, contrastBadge)}
-    ${renderCss(el)}
-    ${renderShadows(el.shadows)}
-    ${renderGradients(el.gradients)}
-    ${renderMotion(el)}
-    ${renderEdit(el)}
+    <details class="acc" open>
+      <summary>Code <select class="css-view" id="css-view"><option>Computed</option></select></summary>
+      ${renderCodeBlock(el)}
+    </details>
+
+    <details class="acc" open>
+      <summary>${colors.length} Color <select class="css-view"><option>HEX/HEXA</option></select></summary>
+      ${renderColorPills(colors)}
+    </details>
+
+    <details class="acc" open>
+      <summary>${typeCount} Typography Style</summary>
+      ${renderTypeCard(el.typography)}
+    </details>
   `;
 
   root.querySelectorAll("[data-crumb]").forEach((b) => {
     b.addEventListener("click", () => sendToTab({ type: MSG.SELECT_ANCESTOR, payload: { selector: b.dataset.crumb } }));
   });
-  $("#btn-parent")?.addEventListener("click", () => sendToTab({ type: MSG.SELECT_PARENT }));
   $("#btn-copy-sel")?.addEventListener("click", () => copy(el.uniqueSelector || el.selector));
-  $("#force-state")?.addEventListener("change", (e) => sendToTab({ type: MSG.FORCE_STATE, payload: { pseudo: e.target.value } }));
-  wireCss(el);
-  wireEdit();
-  wireShadows();
+  $("#copy-code")?.addEventListener("click", () => copy(essentialCssText(el)));
+  root.querySelectorAll("[data-copy]").forEach((b) => b.addEventListener("click", () => copy(b.dataset.copy)));
+  root.querySelectorAll(".css-view").forEach((s) => s.addEventListener("click", (e) => e.stopPropagation()));
+}
+
+function tokenKind(prop, value) {
+  const v = String(value).trim();
+  if (prop === "font-family") return "str";
+  if (["display", "box-sizing", "position", "font-weight"].includes(prop)) return "kw";
+  if (/^(flex|block|inline|inline-block|none|grid|border-box|content-box)$/.test(v)) return "kw";
+  if (/^#|^rgb|^hsl/.test(v)) return "hex";
+  if (/[\d.]+(px|%|em|rem)?/.test(v)) return "num";
+  return "val";
+}
+
+function tok(prop, value) {
+  const kind = tokenKind(prop, value);
+  const shown = prop === "font-family" ? `"${String(value).split(",")[0].replace(/["']/g, "").trim()}"` : value;
+  return `<span class="t-${kind}">${esc(shown)}</span>`;
+}
+
+function essentialDecls(el) {
+  const c = el.computed || {};
+  const t = el.typography || {};
+  const box = el.box;
+  const pad = box ? `${box.padding.top}px ${box.padding.right}px ${box.padding.bottom}px ${box.padding.left}px` : c.padding;
+  const mar = box ? `${box.margin.top}px ${box.margin.right}px ${box.margin.bottom}px ${box.margin.left}px` : c.margin;
+  const color = (el.colors && el.colors.color) || c.color;
+  return [
+    ["width", box ? `${box.width}px` : c.width],
+    ["height", box ? `${box.height}px` : c.height],
+    ["margin", mar],
+    ["padding", pad],
+    ["display", c.display],
+    ["box-sizing", c["box-sizing"]],
+    ["font-size", t.size || c["font-size"]],
+    ["font-family", t.family || c["font-family"]],
+    ["font-weight", t.weight || c["font-weight"]],
+    ["line-height", t.lineHeight || c["line-height"]],
+    ["color", color],
+  ].filter(([, v]) => v != null && v !== "");
+}
+
+function essentialCssText(el) {
+  const lines = essentialDecls(el).map(([p, v]) => `  ${p}: ${v};`);
+  return `${el.selector} {\n${lines.join("\n")}\n}`;
+}
+
+function renderCodeBlock(el) {
+  const decls = essentialDecls(el);
+  let n = 1;
+  const lines = [`<div class="code-line"><span class="ln">${n++}</span><span class="t-sel">${esc(el.selector)}</span> <span class="t-val">{</span></div>`];
+  decls.forEach(([p, v]) => {
+    lines.push(`<div class="code-line"><span class="ln">${n++}</span>  <span class="t-prop">${esc(p)}</span><span class="t-val">: </span>${tok(p, v)}<span class="t-val">;</span></div>`);
+  });
+  lines.push(`<div class="code-line"><span class="ln">${n++}</span><span class="t-val">}</span></div>`);
+  return `<div class="code-block">${lines.join("")}<button class="icon-btn code-copy" id="copy-code" title="Copy CSS">${iconCopy()}</button></div>`;
+}
+
+function uniqueColors(el) {
+  const out = [];
+  const seen = new Set();
+  const add = (label, value) => {
+    if (!value || value === "transparent" || value === "rgba(0, 0, 0, 0)") return;
+    const key = String(value).toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ label, value });
+  };
+  if (el.colors) {
+    add("Text", el.colors.color);
+    add("Background", el.colors.background);
+    add("Border", el.colors.border);
+  }
+  return out;
+}
+
+function renderColorPills(colors) {
+  if (!colors.length) return `<p class="empty-note">No colors</p>`;
+  return colors.map((c) => `
+    <div class="color-row">
+      <span class="color-label">${esc(c.label)}</span>
+      <button class="color-pill" data-copy="${esc(c.value)}">
+        <i class="dot" style="background:${esc(c.value)}"></i>${esc(c.value)}
+      </button>
+    </div>`).join("");
+}
+
+function renderTypeCard(t) {
+  if (!t) return "";
+  const family = String(t.family || "").split(",")[0].replace(/["']/g, "").trim();
+  return `<div class="type-card">
+    <div class="font-sample" style="font-family:${esc(t.family)};font-weight:${esc(t.weight)};font-size:${esc(t.size)}">Ag</div>
+    <div class="type-meta">
+      <div class="type-name">${esc(family)}</div>
+      <div class="type-sub">${esc(t.size)} · ${esc(t.weight)} · ${esc(t.lineHeight)}</div>
+    </div>
+  </div>`;
 }
 
 function renderBox(box) {

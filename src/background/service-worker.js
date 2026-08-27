@@ -13,6 +13,8 @@ const CONTENT_SCRIPTS = [
   "src/content/tools/toolbar.js",
   "src/content/tools/rulers.js",
   "src/content/tools/find.js",
+  "src/content/tools/dock.js",
+  "src/content/tools/stage.js",
   "src/content/edit/editor.js",
   "src/content/app.js",
   "src/content/index.js",
@@ -71,15 +73,7 @@ async function handle(msg, senderTabId) {
     case "SR_SIDE_PANEL": {
       const tabId = senderTabId || (await activeTabId());
       if (!tabId) return { ok: false };
-      const tab = await chrome.tabs.get(tabId);
-      if (msg.payload && msg.payload.toggle) {
-        const open = tabActive.get(tabId);
-        if (open) {
-          await chrome.sidePanel.open({ tabId }).catch(() => chrome.sidePanel.open({ windowId: tab.windowId }));
-        }
-      } else {
-        await chrome.sidePanel.open({ tabId }).catch(() => chrome.sidePanel.open({ windowId: tab.windowId }));
-      }
+      await chrome.tabs.sendMessage(tabId, { type: "SR_DOCK_TOGGLE" }).catch(() => {});
       return { ok: true };
     }
     case "SR_SCREENSHOT": {
@@ -163,17 +157,15 @@ async function startOnTab(tabId) {
   tabActive.set(tabId, true);
   await chrome.tabs.sendMessage(tabId, { type: "SR_SET_ACTIVE", payload: { active: true } });
   try {
-    await chrome.sidePanel.setOptions({ tabId, path: "src/sidepanel/index.html", enabled: true });
-    await chrome.sidePanel.open({ tabId });
-  } catch (_) {
-    const tab = await chrome.tabs.get(tabId);
-    try { await chrome.sidePanel.open({ windowId: tab.windowId }); } catch (e) { console.warn(e); }
-  }
+    await chrome.action.setBadgeText({ tabId, text: "ON" });
+    await chrome.action.setBadgeBackgroundColor({ tabId, color: "#2563EB" });
+  } catch (_) { /* ignore */ }
 }
 
 async function stopOnTab(tabId) {
   tabActive.set(tabId, false);
   try { await chrome.tabs.sendMessage(tabId, { type: "SR_SET_ACTIVE", payload: { active: false } }); } catch (_) { /* gone */ }
+  try { await chrome.action.setBadgeText({ tabId, text: "" }); } catch (_) { /* ignore */ }
 }
 
 chrome.tabs.onRemoved.addListener((tabId) => tabActive.delete(tabId));

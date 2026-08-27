@@ -176,39 +176,3 @@ SR.xray = {
     this.style = null;
   },
 };
-
-SR.breakpointsTool = {
-  enabled: false,
-  node: null,
-  enable(shadow) {
-    this.disable();
-    this.enabled = true;
-    this.node = document.createElement("div");
-    this.node.className = "sr-layer";
-    const bps = SR.css.breakpoints();
-    bps.forEach((bp) => {
-      const line = document.createElement("div");
-      line.className = "sr-bp-line";
-      line.style.left = `${bp.px}px`;
-      const tag = document.createElement("div");
-      tag.className = "sr-bp-tag";
-      tag.textContent = `${bp.px}px${bp.active ? " · active" : ""}`;
-      line.appendChild(tag);
-      this.node.appendChild(line);
-    });
-    if (!bps.length) {
-      const tag = document.createElement("div");
-      tag.className = "sr-bp-tag";
-      tag.style.left = "24px";
-      tag.style.top = "28px";
-      tag.textContent = "No width breakpoints found";
-      this.node.appendChild(tag);
-    }
-    shadow.appendChild(this.node);
-  },
-  disable() {
-    this.enabled = false;
-    if (this.node) this.node.remove();
-    this.node = null;
-  },
-};

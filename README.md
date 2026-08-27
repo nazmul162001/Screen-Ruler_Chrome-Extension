@@ -1,44 +1,70 @@
 # Screen Ruler
 
-Chrome extension for measuring, inspecting, and editing anything on the web. Hover for a live box model, click to lock a selection, and use the side panel for CSS, layout, accessibility, and page insights.
+Chrome extension for measuring and inspecting anything on the page. Hover for a live box model and pixel gaps, click to lock a selection, and open the side panel for CSS, layout, and page insights.
 
-## Load unpacked
+Requires **Chrome 116+**.
+
+## Install
 
 1. Open `chrome://extensions`
 2. Turn on **Developer mode**
-3. Click **Load unpacked** and select this folder
-4. Pin **Screen Ruler**, then click the icon on any page (or press `Alt+Shift+S`)
+3. Click **Load unpacked** and choose this folder
+4. Pin **Screen Ruler**
 
-Requires Chrome 116 or later (side panel + OffscreenCanvas).
+After you change the code, click **Reload** on the extension card, then toggle it off and on on the page.
 
-## Shortcuts
+## Turn on / off
 
-| Shortcut | Action |
+| Action | How |
 | --- | --- |
-| `Alt+Shift+S` | Toggle Screen Ruler |
-| `Alt+↑` / `Alt+↓` | Select parent / first child |
-| `Esc` | Clear selection, then close |
-| `1`–`9`, `0` | Control-bar tools / side panel |
-| `Space` | Pin the floating inspector |
+| Toggle | Click the toolbar icon |
+| Toggle | `Alt+Shift+S` (`Option+Shift+S` on Mac) |
+| Quit | `Esc` (clears the selection first, then closes) |
 
 Change the toggle shortcut at `chrome://extensions/shortcuts`.
 
-## Tools
+When it turns on you get the bottom bar only. **Selector mode is already active** — nothing in the bar needs to be highlighted. Hover any section, icon, or image to inspect it. Click a tool to use it; click it again to turn it off. If every tool is off, selector stays on.
 
-Control bar (bottom of the page): inspect, floating inspector, X-Ray, layout grid, page rulers + guides, breakpoints, eyedropper, selector search, element screenshot, responsive presets, pause, side panel.
+## Inspect & measure
 
-**Element tab:** selector, dimensions, DOM crumbs, box model, flex/grid, colors, type, WCAG contrast, computed / source / Tailwind CSS, shadows, gradients, motion, live CSS + HTML edits with revert.
+- **Hover** — box model overlay, selector + size label, padding and margin, and pixel gaps between siblings (logo → icon, icon → icon, and so on)
+- **Padding** — black badges
+- **Margin / gaps** — red badges
+- **Click** — lock the element; dashed guides span the viewport
+- **Click again**, click empty space, or `Esc` — deselect
 
-**Page tab:** social card, SEO, palette, typography, technologies, breakpoints, page weight, asset download.
+## Toolbar
 
-## Layout
+| Tool | Shortcut | What it does |
+| --- | --- | --- |
+| Parent / child | `Alt+↑` / `Alt+↓` | Move up or down the DOM |
+| Selector | `1` | Floating CSS inspector (box model, layout, appearance, text). `Space` pins the card |
+| Layout grid | `3` | Overlay a layout grid |
+| Page rulers | `4` | Rulers and drag-out guides |
+| Color picker | `6` | Eyedropper; copies the hex |
+| Find selector | `7` | Search by CSS selector |
+| Screenshot | `8` | Capture the selected or hovered element |
+| Responsive | `9` | Multi-viewport from the page’s CSS breakpoints, with synced scroll |
+| Side panel | `0` | In-page Element + Page inspector |
+| Pause | — | Freeze hover inspection |
+| Close | — | Turn Screen Ruler off |
+
+## Side panel
+
+**Element** — Document, box model, computed CSS (copy), colors (solid swatches + hex), typography, live CSS/HTML edits with revert.
+
+**Page** — Social card, SEO, palette, typography, detected technologies, breakpoints, page weight.
+
+Copy buttons in the panel write to the clipboard.
+
+## Project layout
 
 ```
-manifest.json
+manifest.json          Manifest V3
+popup.html             Options / shortcuts hint
 icons/
-src/background/service-worker.js
-src/content/           overlay, inspect, tools, live edit
-src/sidepanel/         Element + Page inspector
-src/popup/             shortcuts / options
-src/shared/            constants and CSS maps
+src/background/        Service worker (inject, toggle, badge)
+src/content/           Overlay, inspect, toolbar, dock, responsive stage
+src/sidepanel/         Element + Page UI
+src/shared/            Constants and CSS maps
 ```

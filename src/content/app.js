@@ -11,7 +11,7 @@ SR.app = {
     selected: null,
     mouse: { x: 0, y: 0 },
     tools: {
-      inspect: true,
+      inspect: false,
       floating: false,
       xray: false,
       grid: false,
@@ -20,7 +20,7 @@ SR.app = {
       find: false,
       responsive: false,
       pause: false,
-      panel: true,
+      panel: false,
     },
     nodeSeq: 1,
   },
@@ -33,10 +33,14 @@ SR.app = {
     this.state.active = true;
     await SR.overlay.mount();
     SR.toolbar.mount(SR.overlay.shadow, (id) => this.onTool(id));
+    this.state.tools.inspect = true;
+    this.state.tools.panel = false;
+    this.state.tools.floating = false;
+    SR.toolbar.setActive("panel", false);
+    SR.toolbar.setActive("inspect", false);
     this.bind(true);
     this.emitState();
     this.sendPageInsights();
-    SR.overlay.toast("Screen Ruler is on · Alt+Shift+S to close");
   },
 
   stop() {
@@ -49,10 +53,11 @@ SR.app = {
     SR.rulers.disable();
     SR.grid.disable();
     SR.xray.disable();
-    SR.breakpointsTool.disable();
     SR.find.hide();
     SR.floating.disable();
     SR.responsive.disable();
+    SR.stage.disable();
+    SR.dock.unmount();
     SR.editor.clearForce();
     SR.toolbar.unmount();
     SR.overlay.unmount();
@@ -84,22 +89,40 @@ SR.app = {
   _onKey: (e) => SR.app.onKey(e),
   _onScroll: () => SR.app.paint(),
 
+  tracking() {
+    return this.state.active && (this.state.tools.inspect || this.state.tools.floating);
+  },
+
+  inspectable(el) {
+    if (!el || el === document.documentElement || el === document.body) return null;
+    return el;
+  },
+
   onMove(e) {
-    if (!this.state.active || this.state.paused) return;
-    if (this.isUiEvent(e)) return;
+    if (!this.state.active || this.state.paused || !this.tracking()) return;
+    if (this.isUiEvent(e)) {
+      this.state.hover = null;
+      this.paint();
+      SR.floating.hideFollow();
+      return;
+    }
     this.state.mouse = { x: e.clientX, y: e.clientY };
     if (this.raf) return;
     this.raf = requestAnimationFrame(() => {
       this.raf = 0;
-      const el = SR.dom.deepestAt(this.state.mouse.x, this.state.mouse.y, SR.overlay.host);
+      const el = this.inspectable(SR.dom.deepestAt(this.state.mouse.x, this.state.mouse.y, SR.overlay.host));
       this.state.hover = el;
       this.paint();
-      if (this.state.tools.floating && el) SR.floating.update(el, this.state.mouse.x, this.state.mouse.y);
+      if (this.state.tools.floating && el) {
+        SR.floating.update(el, this.state.mouse.x, this.state.mouse.y);
+      } else {
+        SR.floating.hideFollow();
+      }
     });
   },
 
   onDown(e) {
-    if (!this.state.active || this.state.paused) return;
+    if (!this.state.active || this.state.paused || !this.state.tools.inspect) return;
     if (this.isUiEvent(e)) return;
     if (e.button === 0) {
       e.preventDefault();
@@ -108,12 +131,15 @@ SR.app = {
   },
 
   onClick(e) {
-    if (!this.state.active || this.state.paused) return;
+    if (!this.state.active || this.state.paused || !this.state.tools.inspect) return;
     if (this.isUiEvent(e)) return;
-    const el = SR.dom.deepestAt(e.clientX, e.clientY, SR.overlay.host);
-    if (!el) return;
+    const el = this.inspectable(SR.dom.deepestAt(e.clientX, e.clientY, SR.overlay.host));
     e.preventDefault();
     e.stopPropagation();
+    if (!el) {
+      this.clearSelection();
+      return;
+    }
     if (this.state.selected === el) {
       this.clearSelection();
       return;
@@ -151,8 +177,8 @@ SR.app = {
     }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const map = {
-      Digit1: "floating", Digit2: "xray", Digit3: "grid", Digit4: "rulers",
-      Digit5: "breakpoints", Digit6: "eyedropper", Digit7: "find",
+      Digit1: "inspect", Digit3: "grid", Digit4: "rulers",
+      Digit6: "eyedropper", Digit7: "find",
       Digit8: "screenshot", Digit9: "responsive", Digit0: "panel",
     };
     if (map[e.code]) {
@@ -170,8 +196,23 @@ SR.app = {
   },
 
   paint() {
-    if (!this.state.active) return;
+    if (!this.state.active || !this.state.tools.inspect) {
+      if (SR.overlay) SR.overlay.clear();
+      return;
+    }
     SR.overlay.renderHoverAndSelected(this.state.hover, this.state.selected);
+  },
+
+  setFloating(on) {
+    this.state.tools.floating = !!on;
+    SR.toolbar.setActive("inspect", this.state.tools.floating);
+    if (this.state.tools.floating) {
+      SR.floating.enable(SR.overlay.shadow);
+      const el = this.state.selected || this.state.hover;
+      if (el) SR.floating.update(el, this.state.mouse.x, this.state.mouse.y);
+    } else {
+      SR.floating.disable();
+    }
   },
 
   mark(el) {
@@ -224,9 +265,14 @@ SR.app = {
 
   onTool(id) {
     switch (id) {
+      case "parent":
+        this.selectParent();
+        break;
+      case "child":
+        this.selectChild();
+        break;
       case "inspect":
-        this.state.paused = false;
-        SR.toolbar.setActive("pause", false);
+        this.setFloating(!this.state.tools.floating);
         break;
       case "close":
         this.stop();
@@ -237,12 +283,6 @@ SR.app = {
         this.state.tools.pause = this.state.paused;
         SR.toolbar.setActive("pause", this.state.paused);
         SR.overlay.toast(this.state.paused ? "Inspection paused" : "Inspection resumed");
-        break;
-      case "floating":
-        this.state.tools.floating = !this.state.tools.floating;
-        if (this.state.tools.floating) SR.floating.enable(SR.overlay.shadow);
-        else SR.floating.disable();
-        SR.toolbar.setActive("floating", this.state.tools.floating);
         break;
       case "xray":
         this.state.tools.xray = !this.state.tools.xray;
@@ -259,11 +299,6 @@ SR.app = {
         this.state.tools.rulers ? SR.rulers.enable(SR.overlay.shadow) : SR.rulers.disable();
         SR.toolbar.setActive("rulers", this.state.tools.rulers);
         break;
-      case "breakpoints":
-        this.state.tools.breakpoints = !this.state.tools.breakpoints;
-        this.state.tools.breakpoints ? SR.breakpointsTool.enable(SR.overlay.shadow) : SR.breakpointsTool.disable();
-        SR.toolbar.setActive("breakpoints", this.state.tools.breakpoints);
-        break;
       case "eyedropper":
         SR.eyedropper.pick();
         break;
@@ -278,11 +313,18 @@ SR.app = {
         break;
       case "responsive":
         this.state.tools.responsive = !this.state.tools.responsive;
-        this.state.tools.responsive ? SR.responsive.enable(SR.overlay.shadow) : SR.responsive.disable();
+        if (this.state.tools.responsive) {
+          SR.responsive.enable(SR.overlay.shadow);
+        } else {
+          SR.responsive.disable();
+        }
         SR.toolbar.setActive("responsive", this.state.tools.responsive);
         break;
       case "panel":
-        chrome.runtime.sendMessage({ type: SR.MSG.SIDE_PANEL, payload: { toggle: true } });
+        if (!SR.dock.wrap) SR.dock.mount(SR.overlay.shadow);
+        else SR.dock.toggle();
+        this.state.tools.panel = SR.dock.open;
+        SR.toolbar.setActive("panel", SR.dock.open);
         break;
       default:
         break;
@@ -327,6 +369,12 @@ SR.app = {
           chrome.runtime.sendMessage({ type: SR.MSG.ELEMENT_SELECTED, payload: SR.inspect.snapshot(this.state.selected) });
         }
         this.sendPageInsights();
+        break;
+      case "SR_DOCK_TOGGLE":
+        if (!SR.dock.wrap) SR.dock.mount(SR.overlay.shadow);
+        else SR.dock.toggle();
+        this.state.tools.panel = SR.dock.open;
+        SR.toolbar.setActive("panel", SR.dock.open);
         break;
       case SR.MSG.SELECT_PARENT:
         this.selectParent();

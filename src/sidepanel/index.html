@@ -8,13 +8,15 @@
 </head>
 <body>
   <header class="tabs">
-    <button class="tab is-on" data-tab="element" type="button">Element</button>
-    <button class="tab" data-tab="page" type="button">Page</button>
+    <div class="tab-pills">
+      <button class="tab is-on" data-tab="element" type="button">Element</button>
+      <button class="tab" data-tab="page" type="button">Page</button>
+    </div>
   </header>
 
   <section id="view-element" class="view is-on">
     <div id="empty-element" class="empty">
-      <p>Hover an element, then click to inspect.</p>
+      <p>Click an element on the page.</p>
       <p class="hint">Alt + ↑ parent · Alt + ↓ child · Esc to clear</p>
     </div>
     <div id="element-root" hidden></div>

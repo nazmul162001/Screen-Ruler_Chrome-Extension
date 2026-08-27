@@ -175,4 +175,58 @@ SR.dom = {
     const className = typeof el.className === "string" ? el.className : (el.className && el.className.baseVal) || "";
     return className.trim().split(/\s+/).filter(Boolean);
   },
+
+  formatPx(n) {
+    const v = this.round(n, 1);
+    return Number.isInteger(v) ? String(v) : String(v);
+  },
+
+  visibleBoxChildren(el) {
+    if (!el) return [];
+    const out = [];
+    for (const child of el.children) {
+      if (this.isIgnored(child)) continue;
+      const cs = getComputedStyle(child);
+      if (cs.display === "none" || cs.visibility === "hidden") continue;
+      const r = child.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) continue;
+      out.push(child);
+    }
+    return out;
+  },
+
+  visualSlots(el, depth) {
+    const level = depth || 0;
+    const slots = [];
+    for (const child of this.visibleBoxChildren(el)) {
+      const nested = this.visibleBoxChildren(child);
+      const flatten = level < 4 && nested.length >= 2 && !/^(P|H[1-6]|UL|OL|TABLE|SVG|IMG)$/.test(child.tagName);
+      if (flatten) slots.push(...this.visualSlots(child, level + 1));
+      else slots.push(child);
+    }
+    return slots;
+  },
+
+  parentInsets(el) {
+    const r = el.getBoundingClientRect();
+    const parent = el.parentElement;
+    let leftEdge = 0;
+    let rightEdge = window.innerWidth;
+    let topEdge = 0;
+    let bottomEdge = window.innerHeight;
+    if (parent && parent !== document.documentElement && parent !== document.body) {
+      const p = parent.getBoundingClientRect();
+      const cs = getComputedStyle(parent);
+      leftEdge = p.left + this.px(cs.borderLeftWidth) + this.px(cs.paddingLeft);
+      rightEdge = p.right - this.px(cs.borderRightWidth) - this.px(cs.paddingRight);
+      topEdge = p.top + this.px(cs.borderTopWidth) + this.px(cs.paddingTop);
+      bottomEdge = p.bottom - this.px(cs.borderBottomWidth) - this.px(cs.paddingBottom);
+    }
+    return {
+      left: this.round(r.left - leftEdge, 1),
+      right: this.round(rightEdge - r.right, 1),
+      top: this.round(r.top - topEdge, 1),
+      bottom: this.round(bottomEdge - r.bottom, 1),
+    };
+  },
 };
